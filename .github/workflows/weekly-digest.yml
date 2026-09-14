@@ -1,0 +1,51 @@
+name: Weekly papers digest
+
+on:
+  schedule:
+    # 18:30 China time. Official usually lands on the weekend; skip if unchanged.
+    - cron: "30 10 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Resend even if this issue was already sent
+        type: boolean
+        default: false
+
+concurrency:
+  group: weekly-digest
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Send digest if there is a new issue
+        env:
+          DIGEST_UPSTREAM: dair-ai/AI-Papers-of-the-Week
+          DIGEST_FORCE: ${{ github.event.inputs.force }}
+          MAIL_TO: ${{ secrets.MAIL_TO }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+        run: python3 scripts/send_digest.py
+
+      - name: Record last sent issue
+        run: |
+          if git diff --quiet -- .github/digest-state.json; then
+            echo "state unchanged"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/digest-state.json
+          git commit -m "chore: record last emailed papers issue"
+          git push
